@@ -97,6 +97,10 @@ Library usage:
     # Get ALTO XML output
     xml = pytesseract.image_to_alto_xml('test.png')
 
+    # getting multiple types of output with one call to save compute time
+    # currently supports mix and match of the following: txt, pdf, hocr, box, tsv
+    text, boxes = pytesseract.run_and_get_multiple_output('test.png', extensions=['txt', 'box'])
+
 Support for OpenCV image/NumPy array objects
 
 .. code-block:: python
@@ -152,6 +156,8 @@ Add the following config, if you have tessdata error like: "Error opening data f
 * **image_to_alto_xml** Returns result in the form of Tesseract's ALTO XML format.
 
 * **run_and_get_output** Returns the raw output from Tesseract OCR. Gives a bit more control over the parameters that are sent to tesseract.
+
+* **run_and_get_multiple_output** Returns like `run_and_get_output` but can handle multiple extensions. This function replaces the `extension: str` kwarg with `extension: List[str]` kwarg where a list of extensions can be specified and the corresponding data is returned after only one `tesseract` call. This function reduces the number of calls to `tesseract` when multiple output formats, like both text and bounding boxes,  are needed.
 
 **Parameters**
 
@@ -241,12 +247,4 @@ As of Python-tesseract 0.3.1 the license is Apache License Version 2.0
 CONTRIBUTORS
 ------------
 - Originally written by `Samuel Hoffstaetter <https://github.com/h>`_
-- `Juarez Bochi <https://github.com/jbochi>`_
-- `Matthias Lee <https://github.com/madmaze>`_
-- `Lars Kistner <https://github.com/Sr4l>`_
-- `Ryan Mitchell <https://github.com/REMitchell>`_
-- `Emilio Cecchini <https://github.com/ceccoemi>`_
-- `John Hagen <https://github.com/johnthagen>`_
-- `Darius Morawiec <https://github.com/nok>`_
-- `Eddie Bedada <https://github.com/adbeda>`_
-- `Uğurcan Akyüz <https://github.com/ugurcanakyuz>`_
+- `Full list of contributors <https://github.com/madmaze/pytesseract/graphs/contributors>`_
