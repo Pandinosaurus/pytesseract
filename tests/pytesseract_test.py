@@ -1,3 +1,6 @@
+from __future__ import annotations
+
+from functools import partial
 from glob import iglob
 from multiprocessing import Pool
 from os import getcwd
@@ -20,9 +23,11 @@ from pytesseract import image_to_osd
 from pytesseract import image_to_pdf_or_hocr
 from pytesseract import image_to_string
 from pytesseract import Output
+from pytesseract import run_and_get_multiple_output
 from pytesseract import TesseractNotFoundError
 from pytesseract import TSVNotSupported
 from pytesseract.pytesseract import file_to_dict
+from pytesseract.pytesseract import LANG_PATTERN
 from pytesseract.pytesseract import numpy_installed
 from pytesseract.pytesseract import pandas_installed
 from pytesseract.pytesseract import prepare
@@ -71,6 +76,17 @@ def test_file_european():
 @pytest.fixture(scope='session')
 def test_file_small():
     return path.join(DATA_DIR, 'test-small.jpg')
+
+
+@pytest.fixture(scope='session')
+def function_mapping():
+    return {
+        'pdf': partial(image_to_pdf_or_hocr, extension='pdf'),
+        'txt': image_to_string,
+        'box': image_to_boxes,
+        'hocr': partial(image_to_pdf_or_hocr, extension='hocr'),
+        'tsv': image_to_data,
+    }
 
 
 @pytest.mark.parametrize(
@@ -227,6 +243,33 @@ def test_image_to_pdf_or_hocr(test_file, extension):
         assert result.endswith('</html>')
 
 
+@pytest.mark.parametrize(
+    'extensions',
+    [
+        ['tsv', 'pdf', 'txt', 'box', 'hocr'],
+        # This tests a case where the extensions do not add any config params
+        # Here this test is not merged with the test above because we might get
+        # into a racing condition where test results from different parameter
+        # are mixed in the test below
+        ['pdf', 'txt'],
+    ],
+)
+def test_run_and_get_multiple_output(test_file, function_mapping, extensions):
+    compound_results = run_and_get_multiple_output(
+        test_file,
+        extensions=extensions,
+    )
+    for result, extension in zip(compound_results, extensions):
+        if extension == 'pdf':
+            # pdf creation time could be different between the two so do not
+            # check the whole string
+            assert (
+                result[:1000] == function_mapping[extension](test_file)[:1000]
+            )
+        else:
+            assert result == function_mapping[extension](test_file)
+
+
 @pytest.mark.skipif(
     TESSERACT_VERSION[:2] < (4, 1),
     reason='requires tesseract >= 4.1',
@@ -253,7 +296,7 @@ def test_image_to_alto_xml_support(test_file):
     TESSERACT_VERSION[:2] >= (3, 5),
     reason='requires tesseract < 3.05',
 )
-def test_image_to_data__pandas_support(test_file_small):
+def test_image_to_data_pandas_support(test_file_small):
     with pytest.raises(TSVNotSupported):
         image_to_data(test_file_small, output_type=Output.DATAFRAME)
 
@@ -263,7 +306,7 @@ def test_image_to_data__pandas_support(test_file_small):
     reason='requires tesseract >= 3.05',
 )
 @pytest.mark.skipif(pandas_installed is False, reason='requires pandas')
-def test_image_to_data__pandas_output(test_file_small):
+def test_image_to_data_pandas_output(test_file_small):
     """Test and compare the type and meta information of the result."""
     result = image_to_data(test_file_small, output_type=Output.DATAFRAME)
     assert isinstance(result, pandas.DataFrame)
@@ -364,10 +407,10 @@ def test_main_not_found_cases(
 
     monkeypatch.setattr('sys.argv', ['', test_invalid_file])
     assert pytesseract.pytesseract.main() == 1
-    captured_stderr = capsys.readouterr().err
+    captured = capsys.readouterr()
     assert (
-        'No such file or directory' in captured_stderr
-        and test_invalid_file in captured_stderr
+        'No such file or directory' in captured.err
+        and repr(test_invalid_file) in captured.err
     )
 
     monkeypatch.setattr(
@@ -377,7 +420,8 @@ def test_main_not_found_cases(
     monkeypatch.setattr('sys.argv', ['', test_file])
     assert pytesseract.pytesseract.main() == 1
     assert (
-        "is not installed or it's not in your PATH" in capsys.readouterr().err
+        "wrong_tesseract is not installed or it's not in your PATH. "
+        'See README file for more information.' in capsys.readouterr().err
     )
 
     monkeypatch.setattr('sys.argv', [''])
@@ -475,3 +519,20 @@ def test_get_tesseract_version_invalid(tesseract_version, expected_msg):
 
         (msg,) = e.value.args
         assert msg == expected_msg
+
+
+@pytest.mark.parametrize(
+    'lang',
+    [
+        'bhu',
+        'eng',
+        'bhu_eng',
+        'eng_bhu',
+        '7seg',
+        'bhu32',
+        'bhu32_7seg',
+        '7seg_eng',
+    ],
+)
+def test_allowed_language_formats(lang):
+    assert LANG_PATTERN.match(lang)
